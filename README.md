@@ -17,7 +17,7 @@ WhisperLive只提供了python的客户端，我写了个c++客户端通过websoc
 3. 编译microphone_live，参考CMakeLists.txt
 4. 运行microphone_live
 
-## 参考仓库地址
+## 参考链接
 
 - WhisperLive: https://github.com/collabora/WhisperLive
 - nlohmann/json: https://github.com/nlohmann/json
