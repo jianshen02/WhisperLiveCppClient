@@ -46,7 +46,7 @@ std::vector<float> resampleAudio(const std::vector<float>& input, int inputSampl
     return output;
 }
 
-// 你的audioCallback函数中，调用重采样函数
+// 音频回调函数，用于处理捕获的音频数据
 extern "C" int audioCallback(void *outputBuffer, void *inputBuffer, unsigned int nBufferFrames,
                              double streamTime, RtAudioStreamStatus status, void *userData) {
     auto *ws = static_cast<websocket::stream<tcp::socket> *>(userData);
@@ -69,22 +69,22 @@ extern "C" int audioCallback(void *outputBuffer, void *inputBuffer, unsigned int
             }
         });
 
-    return 0;  // Return zero to continue streaming
+    return 0;  // 返回0以继续流式处理
 }
 
 class ClientState {
 public:
     enum State {
-        CONNECTING,
-        CONNECTED,
-        DISCONNECTED,
-        ERROR
+        CONNECTING,   // 正在连接
+        CONNECTED,    // 已连接
+        DISCONNECTED, // 已断开
+        ERROR         // 错误
     };
 
 private:
-    State currentState;
-    int errorCount;
-    std::string lastErrorMessage;
+    State currentState;            // 当前状态
+    int errorCount;                // 错误计数
+    std::string lastErrorMessage;  // 最后一次错误信息
 
 public:
     ClientState() : currentState(CONNECTING), errorCount(0) {}
@@ -114,37 +114,39 @@ public:
     }
 };
 
+// 开始音频流处理函数
 void start_audio_stream(RtAudio& dac, websocket::stream<tcp::socket>& ws, ClientState& state) {
-    RtAudio::StreamParameters parameters;
-    parameters.deviceId = dac.getDefaultInputDevice();
-    parameters.nChannels = 1;
-    unsigned int sampleRate = 44100;
-    unsigned int bufferFrames = 8192;
+    RtAudio::StreamParameters parameters;                  // 音频流参数配置
+    parameters.deviceId = dac.getDefaultInputDevice();     // 获取默认输入设备ID
+    parameters.nChannels = 1;                              // 单声道
+    unsigned int sampleRate = 44100;                       // 采样率44.1kHz
+    unsigned int bufferFrames = 8192;                      // 缓冲区大小8192帧
 
     try {
         dac.openStream(nullptr, &parameters, RTAUDIO_SINT16, sampleRate, &bufferFrames,
-                       audioCallback, &ws); // Pass websocket stream to the callback
+                       audioCallback, &ws); // 打开音频流并设置回调函数
         dac.startStream();
         BOOST_LOG_TRIVIAL(info) << "Audio stream started.";
 
-        // Continue streaming until an external signal or condition stops it
+        // 继续流式处理，直到外部信号或条件停止
         while (!audio_finished && !state.hasErrorOccurred()) {
-            std::this_thread::sleep_for(std::chrono::seconds(1)); // Keep streaming
+            std::this_thread::sleep_for(std::chrono::seconds(1)); // 继续流式处理
         }
 
-        dac.stopStream();
+        dac.stopStream();                        // 停止音频流
         if (dac.isStreamOpen()) {
-            dac.closeStream();
+            dac.closeStream();                   // 关闭音频流
         }
         std::lock_guard<std::mutex> lock(cv_m);
         audio_finished = true;
         cv.notify_one();
     } catch (RtAudioError& e) {
         e.printMessage();
-        state.logError("Failed to start audio stream: " + e.getMessage());
+        state.logError("Failed to start audio stream: " + e.getMessage());  // 记录启动失败的错误
     }
 }
 
+// 处理语音识别结果函数
 void process_segment(const nlohmann::json& segment) {
     if (segment.contains("text") && segment["text"].is_string()) {
         std::string text = segment["text"].get<std::string>();
@@ -157,6 +159,7 @@ void process_segment(const nlohmann::json& segment) {
     // }
 }
 
+// 处理接收WebSocket消息
 void handle_receive(websocket::stream<tcp::socket>& ws, boost::beast::multi_buffer& buffer, ClientState& state) {
     ws.async_read(buffer, [&ws, &buffer, &state](boost::system::error_code ec, std::size_t bytes_transferred) {
         // BOOST_LOG_TRIVIAL(info) << "Data received, size: " << bytes_transferred;
@@ -170,7 +173,7 @@ void handle_receive(websocket::stream<tcp::socket>& ws, boost::beast::multi_buff
                 if (json_message.contains("segments") && json_message["segments"].is_array()) {
                     for (auto& segment : json_message["segments"]) {
                         // BOOST_LOG_TRIVIAL(debug) << "Debug: Entered process_segment function";
-                        process_segment(segment);  // Process each segment individually
+                        process_segment(segment);  // 处理每个段落
                     }
                 }
                 
@@ -191,15 +194,16 @@ void handle_receive(websocket::stream<tcp::socket>& ws, boost::beast::multi_buff
     });
 }
 
+// 程序主入口
 int main() {
-    RtAudio dac;
+    RtAudio dac;                                    // 创建RtAudio对象
     if (dac.getDeviceCount() < 1) {
         std::cerr << "No audio devices found!\n";
-        return 1;
+        return 1;                                  // 如果没有音频设备，退出程序
     }
 
-    io_context ioc;
-    tcp::resolver resolver(ioc);
+    io_context ioc;                               // 创建asio io_context对象
+    tcp::resolver resolver(ioc);                  // 创建解析器
     auto endpoints = resolver.resolve("localhost", "9090");
 
     websocket::stream<tcp::socket> ws(ioc);
@@ -209,6 +213,7 @@ int main() {
 
     BOOST_LOG_TRIVIAL(info) << "WebSocket handshake successful.";
 
+    // 创建初始化消息
     json init_message = {
         {"language", "zh"},
         {"task", "transcribe"},
@@ -217,26 +222,26 @@ int main() {
         {"model", "small"}
     };
 
-    ws.text(true);
-    ws.write(boost::asio::buffer(init_message.dump()));
+    ws.text(true);                                       // 设置为文本模式
+    ws.write(boost::asio::buffer(init_message.dump()));  // 发送初始化消息
     BOOST_LOG_TRIVIAL(info) << "Sent initial message.";
 
-    ClientState state;
-    boost::beast::multi_buffer buffer;  // Buffer to hold incoming messages
+    ClientState state;                  // 创建客户端状态对象
+    boost::beast::multi_buffer buffer;  // 创建用于接收消息的缓冲区
     // BOOST_LOG_TRIVIAL(info) << "Starting receive loop.";
-    handle_receive(ws, buffer, state);  // Start the asynchronous receive
+    handle_receive(ws, buffer, state);  // 开始异步接收
     // BOOST_LOG_TRIVIAL(info) << "Done receive loop.";
 
-    std::thread audio_thread([&]() { start_audio_stream(dac, ws, state); });
+    std::thread audio_thread([&]() { start_audio_stream(dac, ws, state); }); // 创建音频流线程
 
-    ioc.run();  // This will block until all asynchronous operations have completed
+    ioc.run();  // 运行io_context，直到所有异步操作完成
 
-    // Wait for audio to finish
+    // 等待音频完成
     std::unique_lock<std::mutex> lock(cv_m);
     cv.wait(lock, [] { return audio_finished; });
 
     if (audio_thread.joinable()) {
-        audio_thread.join();
+        audio_thread.join();                      // 如果音频线程可连接，则加入
     }
 
     // Cleanup

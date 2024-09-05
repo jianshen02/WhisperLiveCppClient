@@ -19,7 +19,6 @@ pkg_search_module(SAMPLERATE REQUIRED samplerate)
 include_directories(${Boost_INCLUDE_DIR})
 include_directories(/home/ubuntu/Desktop/workspace/cppProjects/microphone_live/websocketpp) # 确保这里路径正确
 include_directories(/usr/include)  # PortAudio 头文件位置
-include_directories(${PROJECT_SOURCE_DIR}/include)
 include_directories(${PROJECT_SOURCE_DIR}/json/include/nlohmann)
 include_directories(${PROJECT_SOURCE_DIR}/json/include)
 include_directories(/usr/include/rtaudio)  # RtAudio 头文件位置
@@ -32,7 +31,7 @@ set(SOURCE_FILES
 )
 
 # 创建可执行文件
-add_executable(microphone_live ${SOURCE_FILES} Base64.cpp)
+add_executable(microphone_live ${SOURCE_FILES})
 
 
 # 链接库
