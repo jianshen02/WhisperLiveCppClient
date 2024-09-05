@@ -13,11 +13,12 @@ WhisperLive只提供了python的客户端，我写了个c++客户端通过websoc
 ## 使用方法
 
 1. 运行WhisperLive服务端，参考https://github.com/collabora/WhisperLive/blob/main/README.md
-2. 编译microphone_live，参考CMakeLists.txt
-3. 运行microphone_live
+2. 添加nlohmann/json到项目文件夹
+3. 编译microphone_live，参考CMakeLists.txt
+4. 运行microphone_live
 
 ## 参考仓库地址
 
 - WhisperLive: https://github.com/collabora/WhisperLive
-- nlohmann: https://github.com/nlohmann/json
+- nlohmann/json: https://github.com/nlohmann/json
 
